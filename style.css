@@ -1059,6 +1059,7 @@ footer {
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
   position: relative;
   animation: modalScale 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+  box-sizing: border-box;
 }
 
 @keyframes modalScale {
@@ -1075,5 +1076,25 @@ footer {
   color: var(--text-muted);
   font-size: 1.3rem;
   cursor: pointer;
+  z-index: 10;
+}
+
+.modal-close-btn:hover {
+  color: #fff;
+}
+
+@keyframes pulseGold {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(246, 200, 96, 0.4);
+    border-color: rgba(246, 200, 96, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 22px rgba(246, 200, 96, 0.85);
+    border-color: rgba(246, 200, 96, 1);
+  }
+}
+
+.pulse-gold {
+  animation: pulseGold 2s infinite ease-in-out;
 }
 

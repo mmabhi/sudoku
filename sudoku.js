@@ -167,7 +167,8 @@
     myPlayerId: null,
     myPlayerName: '',
     liveMistakeHints: false,
-    highlightConflicts: false
+    highlightConflicts: false,
+    roundCount: 1
   };
 
   // --- DOM REFERENCES ---
@@ -208,10 +209,12 @@
     dom.sudokuHostRoomBadge = document.getElementById('sudokuHostRoomBadge');
     dom.sudokuHostWinnerCard = document.getElementById('sudokuHostWinnerCard');
     dom.sudokuHostWinnerText = document.getElementById('sudokuHostWinnerText');
+    dom.sudokuHostWinnerNextGameBtn = document.getElementById('sudokuHostWinnerNextGameBtn');
     dom.sudokuHostQrCode = document.getElementById('sudokuHostQrCode');
     dom.sudokuCopyLinkBtn = document.getElementById('sudokuCopyLinkBtn');
     dom.sudokuWhatsappBtn = document.getElementById('sudokuWhatsappBtn');
     dom.sudokuHostStartRaceBtn = document.getElementById('sudokuHostStartRaceBtn');
+    dom.sudokuHostNextGameLobbyBtn = document.getElementById('sudokuHostNextGameLobbyBtn');
     dom.sudokuHostPlayTooBtn = document.getElementById('sudokuHostPlayTooBtn');
     dom.sudokuHostPlayerList = document.getElementById('sudokuHostPlayerList');
     dom.sudokuHostPlayerCount = document.getElementById('sudokuHostPlayerCount');
@@ -235,13 +238,34 @@
     dom.sudokuCheckBtn = document.getElementById('sudokuCheckBtn');
     dom.sudokuConflictToggle = document.getElementById('sudokuConflictToggle');
 
+    // Host Quick Toolbar on Game Board
+    dom.hostGameToolbar = document.getElementById('hostGameToolbar');
+    dom.hostGameViewLobbyBtn = document.getElementById('hostGameViewLobbyBtn');
+    dom.hostGameAddNextBtn = document.getElementById('hostGameAddNextBtn');
+
     // Winner Banner & Modals
     dom.raceWinnerBanner = document.getElementById('raceWinnerBanner');
     dom.raceWinnerBannerText = document.getElementById('raceWinnerBannerText');
+    dom.hostBannerAddNextBtn = document.getElementById('hostBannerAddNextBtn');
     dom.dismissBannerBtn = document.getElementById('dismissBannerBtn');
     dom.sudokuModalOverlay = document.getElementById('sudokuModalOverlay');
     dom.sudokuModalContent = document.getElementById('sudokuModalContent');
     dom.sudokuModalClose = document.getElementById('sudokuModalClose');
+
+    // Next Game Modal
+    dom.sudokuNextGameModalOverlay = document.getElementById('sudokuNextGameModalOverlay');
+    dom.sudokuNextGameClose = document.getElementById('sudokuNextGameClose');
+    dom.nextGameRoundBadge = document.getElementById('nextGameRoundBadge');
+    dom.nextPuzzleTextInput = document.getElementById('nextPuzzleTextInput');
+    dom.nextPasteClipboardBtn = document.getElementById('nextPasteClipboardBtn');
+    dom.nextCopyPuzzleBtn = document.getElementById('nextCopyPuzzleBtn');
+    dom.nextClearPuzzleBtn = document.getElementById('nextClearPuzzleBtn');
+    dom.nextPuzzleFileInput = document.getElementById('nextPuzzleFileInput');
+    dom.nextPuzzleValidationStatus = document.getElementById('nextPuzzleValidationStatus');
+    dom.nextAdminPreviewGrid = document.getElementById('nextAdminPreviewGrid');
+    dom.nextHostLiveMistakeToggle = document.getElementById('nextHostLiveMistakeToggle');
+    dom.cancelNextGameBtn = document.getElementById('cancelNextGameBtn');
+    dom.startNextRaceBtn = document.getElementById('startNextRaceBtn');
   }
 
   // --- INITIALIZATION ---
@@ -253,6 +277,7 @@
     setupPlayerJoinControls();
     setupGameBoardControls();
     setupKeyboardListeners();
+    setupNextGameModalControls();
 
     // Check URL parameters for sudoku mode or room
     checkUrlParams();
@@ -457,12 +482,299 @@
     });
   }
 
+  // --- NEXT GAME (HOST ADDS ANOTHER GAME) ---
+  function setupNextGameModalControls() {
+    // Preset buttons
+    document.querySelectorAll('.next-game-preset').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        window.soundFx && window.soundFx.playClick();
+        const preset = e.target.getAttribute('data-preset');
+        loadNextPresetPuzzle(preset);
+      });
+    });
+
+    // Debounced input validation
+    if (dom.nextPuzzleTextInput) {
+      dom.nextPuzzleTextInput.addEventListener('input', () => {
+        clearTimeout(dom.nextPuzzleTextInput._debounce);
+        dom.nextPuzzleTextInput._debounce = setTimeout(() => validateNextPuzzle(false), 300);
+      });
+    }
+
+    // Paste from clipboard
+    if (dom.nextPasteClipboardBtn) {
+      dom.nextPasteClipboardBtn.addEventListener('click', async () => {
+        window.soundFx && window.soundFx.playClick();
+        try {
+          const text = await navigator.clipboard.readText();
+          if (text && text.trim()) {
+            dom.nextPuzzleTextInput.value = text.trim();
+            validateNextPuzzle(true);
+            showToast('Pasted puzzle from clipboard!');
+          } else {
+            showToast('Clipboard is empty.');
+          }
+        } catch (err) {
+          const manual = prompt('Paste your 81-character puzzle string here:');
+          if (manual && manual.trim()) {
+            dom.nextPuzzleTextInput.value = manual.trim();
+            validateNextPuzzle(true);
+          }
+        }
+      });
+    }
+
+    // Copy puzzle
+    if (dom.nextCopyPuzzleBtn) {
+      dom.nextCopyPuzzleBtn.addEventListener('click', () => {
+        window.soundFx && window.soundFx.playClick();
+        const val = dom.nextPuzzleTextInput ? dom.nextPuzzleTextInput.value.trim() : '';
+        if (!val) {
+          showToast('No puzzle string to copy.');
+          return;
+        }
+        navigator.clipboard.writeText(val).then(() => {
+          showToast('Puzzle copied to clipboard!');
+        }).catch(() => {
+          prompt('Copy puzzle string:', val);
+        });
+      });
+    }
+
+    // Clear puzzle
+    if (dom.nextClearPuzzleBtn) {
+      dom.nextClearPuzzleBtn.addEventListener('click', () => {
+        window.soundFx && window.soundFx.playClick();
+        if (dom.nextPuzzleTextInput) dom.nextPuzzleTextInput.value = '';
+        validateNextPuzzle(false);
+      });
+    }
+
+    // File upload
+    if (dom.nextPuzzleFileInput) {
+      dom.nextPuzzleFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          if (dom.nextPuzzleTextInput) {
+            dom.nextPuzzleTextInput.value = event.target.result;
+            validateNextPuzzle(true);
+          }
+        };
+        reader.readAsText(file);
+      });
+    }
+
+    // Modal Close / Cancel
+    if (dom.sudokuNextGameClose) {
+      dom.sudokuNextGameClose.addEventListener('click', closeNextGameModal);
+    }
+    if (dom.cancelNextGameBtn) {
+      dom.cancelNextGameBtn.addEventListener('click', closeNextGameModal);
+    }
+
+    // Start Next Race
+    if (dom.startNextRaceBtn) {
+      dom.startNextRaceBtn.addEventListener('click', () => {
+        window.soundFx && window.soundFx.playClick();
+        startNextRace();
+      });
+    }
+
+    // Buttons that open Next Game Modal
+    if (dom.sudokuHostWinnerNextGameBtn) {
+      dom.sudokuHostWinnerNextGameBtn.addEventListener('click', () => {
+        window.soundFx && window.soundFx.playClick();
+        openNextGameModal();
+      });
+    }
+    if (dom.sudokuHostNextGameLobbyBtn) {
+      dom.sudokuHostNextGameLobbyBtn.addEventListener('click', () => {
+        window.soundFx && window.soundFx.playClick();
+        openNextGameModal();
+      });
+    }
+    if (dom.hostBannerAddNextBtn) {
+      dom.hostBannerAddNextBtn.addEventListener('click', () => {
+        window.soundFx && window.soundFx.playClick();
+        openNextGameModal();
+      });
+    }
+    if (dom.hostGameAddNextBtn) {
+      dom.hostGameAddNextBtn.addEventListener('click', () => {
+        window.soundFx && window.soundFx.playClick();
+        openNextGameModal();
+      });
+    }
+    if (dom.hostGameViewLobbyBtn) {
+      dom.hostGameViewLobbyBtn.addEventListener('click', () => {
+        window.soundFx && window.soundFx.playClick();
+        switchSudokuView('sudokuHostLobbyView');
+      });
+    }
+  }
+
+  function loadNextPresetPuzzle(difficulty) {
+    const puz = SudokuEngine.PRESETS[difficulty] || SudokuEngine.PRESETS.medium;
+    if (dom.nextPuzzleTextInput) {
+      dom.nextPuzzleTextInput.value = puz;
+      validateNextPuzzle(true);
+    }
+  }
+
+  function validateNextPuzzle(showAlerts = true) {
+    if (!dom.nextPuzzleTextInput) return { valid: false };
+    const raw = dom.nextPuzzleTextInput.value;
+    const grid = SudokuEngine.parseGrid(raw);
+
+    if (!grid) {
+      if (dom.nextPuzzleValidationStatus) {
+        dom.nextPuzzleValidationStatus.className = 'status-msg status-error';
+        dom.nextPuzzleValidationStatus.textContent = '❌ Must contain exactly 81 characters (digits 1-9 or . / 0).';
+      }
+      renderNextAdminPreview(null);
+      if (dom.startNextRaceBtn) dom.startNextRaceBtn.disabled = true;
+      return { valid: false, reason: 'Invalid puzzle input format' };
+    }
+
+    const check = SudokuEngine.validatePuzzle(grid);
+    if (!check.valid) {
+      if (dom.nextPuzzleValidationStatus) {
+        dom.nextPuzzleValidationStatus.className = 'status-msg status-error';
+        dom.nextPuzzleValidationStatus.textContent = '❌ ' + check.reason;
+      }
+      renderNextAdminPreview(grid, SudokuEngine.findConflicts(grid));
+      if (dom.startNextRaceBtn) dom.startNextRaceBtn.disabled = true;
+      return check;
+    }
+
+    if (dom.nextPuzzleValidationStatus) {
+      dom.nextPuzzleValidationStatus.className = 'status-msg status-success';
+      dom.nextPuzzleValidationStatus.textContent = `✅ Valid puzzle! (${check.clueCount} clues, verified solvable)`;
+    }
+    renderNextAdminPreview(grid);
+    if (dom.startNextRaceBtn) dom.startNextRaceBtn.disabled = false;
+    return { valid: true, grid, solution: check.solution };
+  }
+
+  function renderNextAdminPreview(grid, conflicts = new Set()) {
+    if (!dom.nextAdminPreviewGrid) return;
+    dom.nextAdminPreviewGrid.innerHTML = '';
+    if (!grid) {
+      dom.nextAdminPreviewGrid.innerHTML = '<div style="grid-column: span 9; text-align: center; color: var(--text-muted); padding: 14px; font-size: 0.78rem;">Enter an 81-character puzzle above</div>';
+      return;
+    }
+
+    grid.forEach((num, idx) => {
+      const cell = document.createElement('div');
+      cell.className = 'preview-cell' + (num > 0 ? ' has-number' : '') + (conflicts.has(idx) ? ' conflict' : '');
+      cell.textContent = num > 0 ? num : '';
+      dom.nextAdminPreviewGrid.appendChild(cell);
+    });
+  }
+
+  function openNextGameModal() {
+    if (!state.isAdmin) return;
+    closeModal();
+
+    const nextRound = (state.roundCount || 1) + 1;
+    if (dom.nextGameRoundBadge) {
+      dom.nextGameRoundBadge.textContent = nextRound;
+    }
+
+    // Carry over host mistake hint preference
+    if (dom.nextHostLiveMistakeToggle) {
+      dom.nextHostLiveMistakeToggle.checked = state.liveMistakeHints;
+    }
+
+    // Default to a medium preset or validate current
+    if (!dom.nextPuzzleTextInput || !dom.nextPuzzleTextInput.value || !dom.nextPuzzleTextInput.value.trim()) {
+      loadNextPresetPuzzle('medium');
+    } else {
+      validateNextPuzzle(true);
+    }
+
+    if (dom.sudokuNextGameModalOverlay) {
+      dom.sudokuNextGameModalOverlay.style.display = 'flex';
+    }
+  }
+
+  function closeNextGameModal() {
+    if (dom.sudokuNextGameModalOverlay) {
+      dom.sudokuNextGameModalOverlay.style.display = 'none';
+    }
+  }
+
+  function startNextRace() {
+    const val = validateNextPuzzle(true);
+    if (!val || !val.valid) {
+      showToast('Please enter or paste a valid solvable puzzle first!');
+      return;
+    }
+
+    state.roundCount = (state.roundCount || 1) + 1;
+    state.puzzleString = SudokuEngine.gridToString(val.grid);
+    state.originalClues = [...val.grid];
+    state.solution = val.solution;
+    state.liveMistakeHints = dom.nextHostLiveMistakeToggle ? dom.nextHostLiveMistakeToggle.checked : false;
+    state.highlightConflicts = state.liveMistakeHints;
+
+    // Reset race states
+    state.winnerAnnounced = null;
+    state.raceStarted = true;
+    state.raceFinished = false;
+
+    // Reset all connected players' race progress
+    Object.keys(state.connectedPlayers).forEach(pid => {
+      const p = state.connectedPlayers[pid];
+      if (p) {
+        p.filledCount = 0;
+        p.finished = false;
+        p.timeFormatted = '';
+        p.isWinner = false;
+      }
+    });
+    renderHostPlayerList();
+
+    if (dom.sudokuHostWinnerCard) dom.sudokuHostWinnerCard.style.display = 'none';
+    if (dom.raceWinnerBanner) dom.raceWinnerBanner.style.display = 'none';
+    if (dom.hostBannerAddNextBtn) dom.hostBannerAddNextBtn.style.display = 'none';
+
+    // Broadcast to all connected players
+    const payload = {
+      type: 'START_RACE',
+      puzzleString: state.puzzleString,
+      liveMistakeHints: state.liveMistakeHints,
+      round: state.roundCount
+    };
+    if (state.connectedSockets) {
+      Object.values(state.connectedSockets).forEach(conn => {
+        try {
+          conn.send(payload);
+        } catch (e) {}
+      });
+    }
+
+    closeNextGameModal();
+    closeModal();
+
+    if (dom.sudokuGameView && dom.sudokuGameView.style.display !== 'none') {
+      startPlayerBoard();
+      showToast(`🚀 Round ${state.roundCount} Started!`);
+    } else {
+      showToast(`🚀 Round ${state.roundCount} broadcast to all players!`);
+      renderSudokuQrCode();
+    }
+  }
+
   // --- HOST ROOM CREATION & LOBBY ---
   function createSudokuRoom() {
     state.isAdmin = true;
     state.roomId = 'SUDOKU-' + Math.floor(1000 + Math.random() * 9000);
     state.liveMistakeHints = dom.hostLiveMistakeToggle ? dom.hostLiveMistakeToggle.checked : false;
     state.highlightConflicts = state.liveMistakeHints;
+    state.roundCount = 1;
     state.connectedPlayers = {};
     state.winnerAnnounced = null;
     state.raceStarted = false;
@@ -787,6 +1099,9 @@
 
   function handlePlayerIncomingData(data) {
     if (data.type === 'ROOM_INFO' || data.type === 'START_RACE') {
+      if (typeof data.round !== 'undefined') {
+        state.roundCount = data.round;
+      }
       if (typeof data.liveMistakeHints !== 'undefined') {
         state.liveMistakeHints = !!data.liveMistakeHints;
         state.highlightConflicts = state.liveMistakeHints;
@@ -797,7 +1112,13 @@
         state.solution = SudokuEngine.solve(state.originalClues);
       }
       if (data.raceStarted || data.type === 'START_RACE') {
+        closeModal();
+        closeNextGameModal();
+        state.winnerAnnounced = null;
         startPlayerBoard();
+        if (data.round && data.round > 1) {
+          showToast(`🚀 Round ${data.round} Started by Host!`);
+        }
       }
       if (data.winnerAnnounced) {
         state.winnerAnnounced = data.winnerAnnounced;
@@ -818,6 +1139,20 @@
     switchSudokuView('sudokuGameView');
     state.raceStarted = true;
     state.raceFinished = false;
+
+    // Reset winner alert banner & banner next game button
+    if (dom.raceWinnerBanner) dom.raceWinnerBanner.style.display = 'none';
+    if (dom.hostBannerAddNextBtn) dom.hostBannerAddNextBtn.style.display = 'none';
+
+    // Show host quick toolbar on game board if host is admin
+    if (dom.hostGameToolbar) {
+      dom.hostGameToolbar.style.display = state.isAdmin ? 'flex' : 'none';
+    }
+
+    // Status badge
+    const roundLabel = (state.roundCount && state.roundCount > 1) ? `⚡ Round ${state.roundCount} Live` : '⚡ Racing Live';
+    dom.sudokuRaceStatusBadge.textContent = roundLabel;
+    dom.sudokuRaceStatusBadge.className = 'status-badge';
 
     // Live Mistake Hints: only display conflict button if enabled by host
     if (!state.liveMistakeHints) {
@@ -1272,6 +1607,12 @@
     dom.sudokuRaceStatusBadge.textContent = '🏆 1st Place Winner!';
     dom.sudokuRaceStatusBadge.className = 'status-badge status-winner';
 
+    const hostNextBtnHtml = state.isAdmin ? `
+      <button class="btn btn-primary" onclick="window.SudokuApp.openNextGameModal()" style="margin-top: 10px; width: 100%; border-color: var(--accent-gold); box-shadow: 0 0 15px rgba(246,200,96,0.3);">
+        ➕ Add Another Game (Next Puzzle)
+      </button>
+    ` : '';
+
     showModal(`
       <div style="font-size: 3.5rem; margin-bottom: 8px;">🏆</div>
       <h2 style="font-family: 'Cinzel', serif; font-size: 1.8rem; color: var(--accent-gold); margin-bottom: 6px;">
@@ -1280,14 +1621,15 @@
       <p style="font-size: 1.1rem; font-weight: 600; margin-bottom: 12px;">
         You won the Sudoku Race!
       </p>
-      <div style="background: rgba(246, 200, 96, 0.1); border: 1px solid rgba(246, 200, 96, 0.3); border-radius: var(--radius-md); padding: 14px; margin-bottom: 18px;">
+      <div style="background: rgba(246, 200, 96, 0.1); border: 1px solid rgba(246, 200, 96, 0.3); border-radius: var(--radius-md); padding: 14px; margin-bottom: 16px;">
         <span style="font-size: 0.9rem; color: var(--text-muted); display: block;">Finishing Time</span>
         <span style="font-size: 1.8rem; font-weight: 800; color: #fff;">${timeFormatted}</span>
       </div>
-      <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 20px;">
+      <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 16px;">
         First to complete the puzzle with 100% accuracy.
       </p>
-      <button class="btn btn-primary" onclick="window.SudokuApp.closeModal()">
+      ${hostNextBtnHtml}
+      <button class="btn btn-secondary" onclick="window.SudokuApp.closeModal()" style="margin-top: 8px; width: 100%;">
         View Completed Board
       </button>
     `);
@@ -1303,7 +1645,16 @@
 
     // 1. Show sticky banner at top of puzzle
     dom.raceWinnerBannerText.innerHTML = `<strong>${escapeHtml(winnerName)}</strong> finished first in <strong>${timeFormatted}</strong>! You lost the race, but keep going to complete your puzzle!`;
+    if (dom.hostBannerAddNextBtn) {
+      dom.hostBannerAddNextBtn.style.display = state.isAdmin ? 'inline-block' : 'none';
+    }
     dom.raceWinnerBanner.style.display = 'flex';
+
+    const hostNextBtnHtml = state.isAdmin ? `
+      <button class="btn btn-primary" onclick="window.SudokuApp.openNextGameModal()" style="margin-top: 10px; width: 100%; border-color: var(--accent-gold); box-shadow: 0 0 15px rgba(246,200,96,0.3);">
+        ➕ Host: Add Another Game (Next Puzzle)
+      </button>
+    ` : '';
 
     // 2. Show brief non-blocking modal alert with "Keep Solving"
     showModal(`
@@ -1314,12 +1665,13 @@
       <p style="font-size: 1.05rem; margin-bottom: 10px;">
         <strong>${escapeHtml(winnerName)}</strong> won 1st place in <strong>${timeFormatted}</strong>.
       </p>
-      <div style="background: rgba(255, 51, 102, 0.1); border: 1px solid rgba(255, 51, 102, 0.3); border-radius: var(--radius-md); padding: 12px; margin-bottom: 18px;">
+      <div style="background: rgba(255, 51, 102, 0.1); border: 1px solid rgba(255, 51, 102, 0.3); border-radius: var(--radius-md); padding: 12px; margin-bottom: 14px;">
         <p style="font-size: 0.95rem; color: var(--text-main);">
           ⚡ You lost the race, but you can still keep playing to complete your puzzle!
         </p>
       </div>
-      <button class="btn btn-primary" onclick="window.SudokuApp.closeModal()">
+      ${hostNextBtnHtml}
+      <button class="btn btn-secondary" onclick="window.SudokuApp.closeModal()" style="margin-top: 8px; width: 100%;">
         Keep Solving ➔
       </button>
     `);
@@ -1327,6 +1679,12 @@
 
   function onSubsequentCompletion(timeFormatted, winnerName) {
     window.soundFx && window.soundFx.playPuzzleComplete();
+
+    const hostNextBtnHtml = state.isAdmin ? `
+      <button class="btn btn-primary" onclick="window.SudokuApp.openNextGameModal()" style="margin-top: 10px; width: 100%; border-color: var(--accent-gold); box-shadow: 0 0 15px rgba(246,200,96,0.3);">
+        ➕ Add Another Game (Next Puzzle)
+      </button>
+    ` : '';
 
     showModal(`
       <div style="font-size: 3.5rem; margin-bottom: 8px;">🎉</div>
@@ -1336,12 +1694,13 @@
       <p style="font-size: 1rem; color: var(--text-muted); margin-bottom: 14px;">
         Great job! You successfully finished the entire puzzle.
       </p>
-      <div style="background: rgba(0, 242, 254, 0.1); border: 1px solid rgba(0, 242, 254, 0.3); border-radius: var(--radius-md); padding: 14px; margin-bottom: 18px;">
+      <div style="background: rgba(0, 242, 254, 0.1); border: 1px solid rgba(0, 242, 254, 0.3); border-radius: var(--radius-md); padding: 14px; margin-bottom: 16px;">
         <span style="font-size: 0.85rem; color: var(--text-muted); display: block;">Your Time</span>
         <span style="font-size: 1.6rem; font-weight: 800; color: #fff;">${timeFormatted}</span>
         ${winnerName ? `<span style="display: block; font-size: 0.85rem; color: var(--accent-gold); margin-top: 4px;">Winner: ${escapeHtml(winnerName)}</span>` : ''}
       </div>
-      <button class="btn btn-primary" onclick="window.SudokuApp.closeModal()">
+      ${hostNextBtnHtml}
+      <button class="btn btn-secondary" onclick="window.SudokuApp.closeModal()" style="margin-top: 8px; width: 100%;">
         Close
       </button>
     `);
@@ -1424,6 +1783,8 @@
   // Expose global for modal clicks
   window.SudokuApp = {
     closeModal,
+    openNextGameModal,
+    closeNextGameModal,
     switchMode
   };
 
