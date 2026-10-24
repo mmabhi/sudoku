@@ -103,16 +103,43 @@
 
     isCompletedAndValid(grid, originalClues, targetSolution) {
       for (let i = 0; i < 81; i++) {
-        if (grid[i] === 0) return false;
+        if (!grid[i] || grid[i] === 0 || isNaN(grid[i])) return false;
         if (originalClues[i] > 0 && grid[i] !== originalClues[i]) return false;
       }
+      // If targetSolution matches
       if (targetSolution) {
+        let matches = true;
         for (let i = 0; i < 81; i++) {
-          if (grid[i] !== targetSolution[i]) return false;
+          if (grid[i] !== targetSolution[i]) {
+            matches = false;
+            break;
+          }
         }
-        return true;
+        if (matches) return true;
       }
-      return this.findConflicts(grid).size === 0;
+      // Check row, column, and 3x3 block uniqueness
+      for (let r = 0; r < 9; r++) {
+        const s = new Set();
+        for (let c = 0; c < 9; c++) s.add(grid[r * 9 + c]);
+        if (s.size !== 9) return false;
+      }
+      for (let c = 0; c < 9; c++) {
+        const s = new Set();
+        for (let r = 0; r < 9; r++) s.add(grid[r * 9 + c]);
+        if (s.size !== 9) return false;
+      }
+      for (let br = 0; br < 3; br++) {
+        for (let bc = 0; bc < 3; bc++) {
+          const s = new Set();
+          for (let r = 0; r < 3; r++) {
+            for (let c = 0; c < 3; c++) {
+              s.add(grid[(br * 3 + r) * 9 + (bc * 3 + c)]);
+            }
+          }
+          if (s.size !== 9) return false;
+        }
+      }
+      return true;
     }
   };
 
@@ -139,7 +166,8 @@
     hostConn: null,
     myPlayerId: null,
     myPlayerName: '',
-    highlightConflicts: true
+    strictMode: true,
+    highlightConflicts: false
   };
 
   // --- DOM REFERENCES ---
@@ -174,9 +202,12 @@
     dom.puzzleValidationStatus = document.getElementById('puzzleValidationStatus');
     dom.adminPreviewGrid = document.getElementById('adminPreviewGrid');
     dom.createSudokuRoomBtn = document.getElementById('createSudokuRoomBtn');
+    dom.hostStrictValidationToggle = document.getElementById('hostStrictValidationToggle');
 
     // Host Lobby
     dom.sudokuHostRoomBadge = document.getElementById('sudokuHostRoomBadge');
+    dom.sudokuHostWinnerCard = document.getElementById('sudokuHostWinnerCard');
+    dom.sudokuHostWinnerText = document.getElementById('sudokuHostWinnerText');
     dom.sudokuHostQrCode = document.getElementById('sudokuHostQrCode');
     dom.sudokuCopyLinkBtn = document.getElementById('sudokuCopyLinkBtn');
     dom.sudokuWhatsappBtn = document.getElementById('sudokuWhatsappBtn');
@@ -430,6 +461,8 @@
   function createSudokuRoom() {
     state.isAdmin = true;
     state.roomId = 'SUDOKU-' + Math.floor(1000 + Math.random() * 9000);
+    state.strictMode = dom.hostStrictValidationToggle ? dom.hostStrictValidationToggle.checked : true;
+    state.highlightConflicts = !state.strictMode;
     state.connectedPlayers = {};
     state.winnerAnnounced = null;
     state.raceStarted = false;
@@ -437,6 +470,7 @@
 
     switchSudokuView('sudokuHostLobbyView');
     dom.sudokuHostRoomBadge.textContent = `ROOM: ${state.roomId}`;
+    if (dom.sudokuHostWinnerCard) dom.sudokuHostWinnerCard.style.display = 'none';
     renderSudokuQrCode();
     renderHostPlayerList();
     initSudokuHostPeer();
@@ -447,7 +481,8 @@
     const params = new URLSearchParams({
       mode: 'sudoku',
       room: state.roomId,
-      puz: state.puzzleString
+      puz: state.puzzleString,
+      strict: state.strictMode ? '1' : '0'
     });
     return `${base}?${params.toString()}`;
   }
@@ -585,62 +620,93 @@
       };
       renderHostPlayerList();
 
-      // Send puzzle info to joined player
+      // Send puzzle and config info to joined player
       conn.send({
         type: 'ROOM_INFO',
         roomId: state.roomId,
         puzzleString: state.puzzleString,
+        strictMode: state.strictMode,
         raceStarted: state.raceStarted,
         winnerAnnounced: state.winnerAnnounced
       });
     } else if (data.type === 'SUDOKU_PROGRESS') {
-      const p = state.connectedPlayers[data.playerId];
+      const playerId = data.playerId || conn.peer;
+      const p = state.connectedPlayers[playerId];
       if (p) {
         p.filledCount = data.filledCount;
         renderHostPlayerList();
       }
     } else if (data.type === 'SUDOKU_FINISH') {
-      const p = state.connectedPlayers[data.playerId];
+      const playerId = data.playerId || conn.peer;
+      const playerName = data.playerName || (state.connectedPlayers[playerId] ? state.connectedPlayers[playerId].name : 'Player');
+      const timeFormatted = data.timeFormatted || '00:00';
       const isFirst = !state.winnerAnnounced;
 
-      if (p) {
+      if (!state.connectedPlayers[playerId]) {
+        state.connectedPlayers[playerId] = {
+          name: playerName,
+          filledCount: 81,
+          finished: true,
+          timeFormatted: timeFormatted,
+          isWinner: isFirst
+        };
+      } else {
+        const p = state.connectedPlayers[playerId];
         p.finished = true;
-        p.timeFormatted = data.timeFormatted;
+        p.timeFormatted = timeFormatted;
         p.isWinner = isFirst;
+        p.filledCount = 81;
       }
 
       if (isFirst) {
         state.winnerAnnounced = {
-          winnerName: data.playerName,
-          timeFormatted: data.timeFormatted,
-          winnerId: data.playerId
+          winnerName: playerName,
+          timeFormatted: timeFormatted,
+          winnerId: playerId
         };
 
-        // Notify winner that they won!
-        conn.send({
-          type: 'YOU_WON',
-          winnerName: data.playerName,
-          timeFormatted: data.timeFormatted
-        });
+        // 1. Notify the winner
+        try {
+          conn.send({
+            type: 'YOU_WON',
+            winnerName: playerName,
+            timeFormatted: timeFormatted
+          });
+        } catch (e) {}
 
-        // Broadcast to ALL OTHER players: YOU LOST THE RACE, BUT KEEP PLAYING!
+        // 2. Broadcast to all OTHER remote players
         Object.entries(state.connectedSockets).forEach(([pid, socket]) => {
           if (pid !== conn.peer) {
             try {
               socket.send({
                 type: 'RACE_LOST_KEEP_PLAYING',
-                winnerName: data.playerName,
-                timeFormatted: data.timeFormatted
+                winnerName: playerName,
+                timeFormatted: timeFormatted
               });
             } catch (e) {}
           }
         });
+
+        // 3. SHOW PROMINENT WINNER ANNOUNCEMENT ON HOST SCREEN!
+        if (dom.sudokuHostWinnerCard && dom.sudokuHostWinnerText) {
+          dom.sudokuHostWinnerText.innerHTML = `<strong>${escapeHtml(playerName)}</strong> finished 1st in <strong>${timeFormatted}</strong>!`;
+          dom.sudokuHostWinnerCard.style.display = 'flex';
+        }
+        window.soundFx && window.soundFx.playVictory();
+        showToast(`🏆 Race Won by ${playerName} in ${timeFormatted}!`);
+
+        // If Host is also playing on the game board:
+        if (dom.sudokuGameView && dom.sudokuGameView.style.display !== 'none') {
+          onRaceLostNotification(playerName, timeFormatted);
+        }
       } else {
-        conn.send({
-          type: 'PUZZLE_COMPLETED_LATER',
-          timeFormatted: data.timeFormatted,
-          winnerName: state.winnerAnnounced.winnerName
-        });
+        try {
+          conn.send({
+            type: 'PUZZLE_COMPLETED_LATER',
+            timeFormatted: timeFormatted,
+            winnerName: state.winnerAnnounced ? state.winnerAnnounced.winnerName : ''
+          });
+        } catch (e) {}
       }
 
       renderHostPlayerList();
@@ -654,7 +720,8 @@
         try {
           conn.send({
             type: 'START_RACE',
-            puzzleString: state.puzzleString
+            puzzleString: state.puzzleString,
+            strictMode: state.strictMode
           });
         } catch (e) {}
       });
@@ -719,25 +786,22 @@
   }
 
   function handlePlayerIncomingData(data) {
-    if (data.type === 'ROOM_INFO') {
+    if (data.type === 'ROOM_INFO' || data.type === 'START_RACE') {
+      if (typeof data.strictMode !== 'undefined') {
+        state.strictMode = !!data.strictMode;
+        state.highlightConflicts = !state.strictMode;
+      }
       if (data.puzzleString) {
         state.puzzleString = data.puzzleString;
         state.originalClues = SudokuEngine.parseGrid(data.puzzleString);
         state.solution = SudokuEngine.solve(state.originalClues);
       }
-      if (data.raceStarted) {
+      if (data.raceStarted || data.type === 'START_RACE') {
         startPlayerBoard();
       }
       if (data.winnerAnnounced) {
         state.winnerAnnounced = data.winnerAnnounced;
       }
-    } else if (data.type === 'START_RACE') {
-      if (data.puzzleString) {
-        state.puzzleString = data.puzzleString;
-        state.originalClues = SudokuEngine.parseGrid(data.puzzleString);
-        state.solution = SudokuEngine.solve(state.originalClues);
-      }
-      startPlayerBoard();
     } else if (data.type === 'RACE_LOST_KEEP_PLAYING') {
       // Core user requirement:
       // "Once er afinishes and has the correct answer others are show you lost but still could complete the puzzle"
@@ -755,6 +819,14 @@
     state.raceStarted = true;
     state.raceFinished = false;
 
+    // Strict Mode: hide conflict toggle button and disable live conflict highlights
+    if (state.strictMode) {
+      state.highlightConflicts = false;
+      if (dom.sudokuConflictToggle) dom.sudokuConflictToggle.style.display = 'none';
+    } else {
+      if (dom.sudokuConflictToggle) dom.sudokuConflictToggle.style.display = 'inline-flex';
+    }
+
     // Parse puzzle
     const clues = SudokuEngine.parseGrid(state.puzzleString) || SudokuEngine.parseGrid(SudokuEngine.PRESETS.medium);
     state.originalClues = clues;
@@ -767,14 +839,16 @@
     // Start live timer
     startTimer();
 
-    // Render 9x9 grid
+    // Render 9x9 grid & update bottom keypad disabled counts
     renderSudokuGrid();
     updateProgressDisplay();
+    updateKeypadCounts();
   }
 
   function renderSudokuGrid() {
     dom.sudokuGrid.innerHTML = '';
-    const conflicts = state.highlightConflicts ? SudokuEngine.findConflicts(state.playerGrid) : new Set();
+    // If strictMode is active, do not compute or show conflicts while solving
+    const conflicts = (!state.strictMode && state.highlightConflicts) ? SudokuEngine.findConflicts(state.playerGrid) : new Set();
 
     for (let i = 0; i < 81; i++) {
       const cell = document.createElement('div');
@@ -932,12 +1006,13 @@
 
     renderSudokuGrid();
     updateProgressDisplay();
+    updateKeypadCounts();
     broadcastProgress();
 
-    // Auto-check if full
+    // Do NOT auto-validate on 81st number: let user review and hit Submit!
     const filledCount = state.playerGrid.filter(v => v > 0).length;
     if (filledCount === 81) {
-      checkPlayerSolution();
+      showToast('All 81 numbers entered! Click "Check / Submit Solution" when ready.');
     }
   }
 
@@ -959,6 +1034,7 @@
 
     renderSudokuGrid();
     updateProgressDisplay();
+    updateKeypadCounts();
     broadcastProgress();
   }
 
@@ -972,7 +1048,41 @@
 
     renderSudokuGrid();
     updateProgressDisplay();
+    updateKeypadCounts();
     broadcastProgress();
+  }
+
+  function updateKeypadCounts() {
+    const counts = {};
+    for (let n = 1; n <= 9; n++) counts[n] = 0;
+    let filledTotal = 0;
+
+    for (let i = 0; i < 81; i++) {
+      const val = state.playerGrid[i];
+      if (val >= 1 && val <= 9) {
+        counts[val]++;
+        filledTotal++;
+      }
+    }
+
+    document.querySelectorAll('.num-key').forEach(btn => {
+      const num = parseInt(btn.dataset.num, 10);
+      const count = counts[num] || 0;
+      // Disable number button when all 9 numbers of this digit are entered
+      if (count >= 9 || filledTotal === 81) {
+        btn.classList.add('disabled');
+        btn.setAttribute('disabled', 'true');
+      } else {
+        btn.classList.remove('disabled');
+        btn.removeAttribute('disabled');
+      }
+    });
+
+    if (filledTotal === 81) {
+      dom.sudokuCheckBtn.classList.add('submit-ready-pulse');
+    } else {
+      dom.sudokuCheckBtn.classList.remove('submit-ready-pulse');
+    }
   }
 
   function setupKeyboardListeners() {
@@ -1072,10 +1182,14 @@
       if (emptyCount > 0) {
         showToast(`Keep going! ${emptyCount} cell${emptyCount === 1 ? '' : 's'} remaining.`);
       } else {
-        showToast('There are conflicts or incorrect numbers. Check highlighted cells!');
-        state.highlightConflicts = true;
-        dom.sudokuConflictToggle.classList.add('active');
-        renderSudokuGrid();
+        if (state.strictMode) {
+          showToast('❌ Solution has incorrect numbers or duplicates. Check carefully and re-submit!');
+        } else {
+          showToast('There are conflicts or incorrect numbers. Check highlighted cells!');
+          state.highlightConflicts = true;
+          if (dom.sudokuConflictToggle) dom.sudokuConflictToggle.classList.add('active');
+          renderSudokuGrid();
+        }
       }
       return;
     }
@@ -1085,14 +1199,7 @@
     state.raceFinished = true;
     const timeFormatted = formatCurrentTime();
 
-    if (state.hostConn && state.hostConn.open) {
-      state.hostConn.send({
-        type: 'SUDOKU_FINISH',
-        playerId: state.myPlayerId,
-        playerName: state.myPlayerName,
-        timeFormatted
-      });
-    } else if (state.isAdmin) {
+    if (state.isAdmin) {
       // Host playing locally
       const isFirst = !state.winnerAnnounced;
       if (isFirst) {
@@ -1113,13 +1220,48 @@
             } catch (e) {}
           });
         }
+        if (dom.sudokuHostWinnerCard && dom.sudokuHostWinnerText) {
+          dom.sudokuHostWinnerText.innerHTML = `<strong>Host</strong> finished 1st in <strong>${timeFormatted}</strong>!`;
+          dom.sudokuHostWinnerCard.style.display = 'flex';
+        }
         onVictoryNotification(timeFormatted);
       } else {
-        onSubsequentCompletion(timeFormatted, state.winnerAnnounced.winnerName);
+        onSubsequentCompletion(timeFormatted, state.winnerAnnounced ? state.winnerAnnounced.winnerName : '');
       }
     } else {
-      // Standalone single player win
-      onVictoryNotification(timeFormatted);
+      let sent = false;
+      if (state.hostConn && state.hostConn.open) {
+        try {
+          state.hostConn.send({
+            type: 'SUDOKU_FINISH',
+            playerId: state.myPlayerId,
+            playerName: state.myPlayerName,
+            timeFormatted
+          });
+          sent = true;
+        } catch (e) {
+          console.warn('Error sending finish to host:', e);
+        }
+      }
+
+      // Reconnect fallback if connection was temporarily interrupted
+      if (!sent && state.peer && state.roomId) {
+        try {
+          const retryConn = state.peer.connect(`sudoku-host-${state.roomId}`, { reliable: true });
+          retryConn.on('open', () => {
+            retryConn.send({
+              type: 'SUDOKU_FINISH',
+              playerId: state.myPlayerId,
+              playerName: state.myPlayerName,
+              timeFormatted
+            });
+          });
+        } catch (e) {}
+      }
+
+      if (!sent && (!state.hostConn || !state.hostConn.open)) {
+        onVictoryNotification(timeFormatted);
+      }
     }
   }
 
@@ -1246,6 +1388,12 @@
       if (puz) {
         state.puzzleString = puz;
         state.originalClues = SudokuEngine.parseGrid(puz) || [];
+      }
+
+      const strictParam = urlParams.get('strict');
+      if (strictParam !== null) {
+        state.strictMode = strictParam === '1';
+        state.highlightConflicts = !state.strictMode;
       }
 
       if (room) {

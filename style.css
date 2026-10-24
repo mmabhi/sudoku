@@ -874,6 +874,31 @@ footer {
   transform: translateY(-2px);
 }
 
+.num-key.disabled,
+.num-key:disabled {
+  opacity: 0.22;
+  cursor: not-allowed;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.05);
+  transform: none !important;
+}
+
+.submit-ready-pulse {
+  animation: submitPulse 1.5s infinite ease-in-out;
+}
+
+@keyframes submitPulse {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(0, 242, 254, 0.4);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(0, 242, 254, 0.85);
+    transform: scale(1.02);
+  }
+}
+
 /* Board Action Buttons */
 .board-actions {
   display: grid;

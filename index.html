@@ -264,6 +264,19 @@
           <div class="preview-grid" id="adminPreviewGrid"></div>
         </div>
 
+        <!-- Host Competition Mode Config -->
+        <div class="form-group" style="margin-top: 10px;">
+          <label style="display: flex; align-items: flex-start; gap: 10px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); padding: 12px 14px; border-radius: var(--radius-md); cursor: pointer;">
+            <input type="checkbox" id="hostStrictValidationToggle" checked style="margin-top: 3px; width: 18px; height: 18px; accent-color: var(--innocent-color); cursor: pointer;">
+            <div>
+              <strong style="font-size: 0.9rem; color: #fff;">Silent Competition Mode (Validate on Submit only)</strong>
+              <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">
+                When enabled, players receive NO live error hints while solving. Mistakes are checked only when they click "Check / Submit Solution".
+              </p>
+            </div>
+          </label>
+        </div>
+
         <div style="display: flex; gap: 8px; margin-top: 14px;">
           <button id="validatePuzzleBtn" class="btn btn-secondary" type="button" style="flex: 1;">
             🔍 Validate
@@ -281,6 +294,15 @@
           <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 6px;">
             Share this room with your friends. When everyone joins, start the race!
           </p>
+        </div>
+
+        <!-- Host Winner Announcement Box (Shown when someone finishes) -->
+        <div id="sudokuHostWinnerCard" class="race-winner-banner" style="display: none; margin: 12px 0;">
+          <span class="banner-icon">🏆</span>
+          <div style="flex: 1; text-align: left;">
+            <strong style="color: var(--accent-gold); font-size: 1rem; display: block;">RACE FINISHED!</strong>
+            <span id="sudokuHostWinnerText" style="font-size: 0.88rem; color: #fff;"></span>
+          </div>
         </div>
 
         <!-- QR Code Container -->
