@@ -231,10 +231,23 @@
           </div>
           <textarea id="puzzleTextInput" rows="3" placeholder="Paste 81-character puzzle string (e.g. 530070000600195000098...)" 
                     style="width: 100%; padding: 12px; background: rgba(0,0,0,0.4); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: #fff; font-family: monospace; font-size: 0.85rem; outline: none; resize: vertical;"></textarea>
+
+          <!-- Clipboard & Quick Action Toolbar -->
+          <div style="display: flex; gap: 6px; margin-top: 6px;">
+            <button type="button" id="pasteClipboardBtn" class="board-action-btn" style="flex: 1; padding: 7px 6px;">
+              📋 Paste from Clipboard
+            </button>
+            <button type="button" id="copyPuzzleBtn" class="board-action-btn" style="flex: 1; padding: 7px 6px;">
+              📄 Copy Puzzle
+            </button>
+            <button type="button" id="clearPuzzleBtn" class="board-action-btn" style="padding: 7px 10px; color: var(--traitor-color);">
+              🗑️ Clear
+            </button>
+          </div>
         </div>
 
         <!-- File Upload Option -->
-        <div class="form-group" style="margin-top: -6px;">
+        <div class="form-group" style="margin-top: 6px;">
           <label class="form-label" style="font-size: 0.8rem; color: var(--text-muted);">Or upload from file (.txt / .json):</label>
           <input type="file" id="puzzleFileInput" accept=".txt,.json,.csv" 
                  style="font-size: 0.8rem; color: var(--text-muted); width: 100%;">

@@ -166,6 +166,9 @@
 
     // Admin Setup
     dom.puzzleTextInput = document.getElementById('puzzleTextInput');
+    dom.pasteClipboardBtn = document.getElementById('pasteClipboardBtn');
+    dom.copyPuzzleBtn = document.getElementById('copyPuzzleBtn');
+    dom.clearPuzzleBtn = document.getElementById('clearPuzzleBtn');
     dom.puzzleFileInput = document.getElementById('puzzleFileInput');
     dom.validatePuzzleBtn = document.getElementById('validatePuzzleBtn');
     dom.puzzleValidationStatus = document.getElementById('puzzleValidationStatus');
@@ -273,6 +276,65 @@
         loadPresetPuzzle(difficulty);
       });
     });
+
+    // Paste from Clipboard
+    if (dom.pasteClipboardBtn) {
+      dom.pasteClipboardBtn.addEventListener('click', async () => {
+        window.soundFx && window.soundFx.playClick();
+        try {
+          if (navigator.clipboard && navigator.clipboard.readText) {
+            const text = await navigator.clipboard.readText();
+            if (text && text.trim()) {
+              dom.puzzleTextInput.value = text.trim();
+              validateAdminPuzzle(true);
+              showToast('📋 Puzzle pasted from clipboard!');
+              return;
+            }
+          }
+          showToast('Clipboard is empty or access not allowed');
+        } catch (err) {
+          // Fallback if browser blocks readText without explicit permission prompt
+          const fallbackText = prompt('Paste your 81-character puzzle string here:');
+          if (fallbackText && fallbackText.trim()) {
+            dom.puzzleTextInput.value = fallbackText.trim();
+            validateAdminPuzzle(true);
+            showToast('📋 Puzzle pasted!');
+          }
+        }
+      });
+    }
+
+    // Copy Puzzle to Clipboard
+    if (dom.copyPuzzleBtn) {
+      dom.copyPuzzleBtn.addEventListener('click', async () => {
+        window.soundFx && window.soundFx.playClick();
+        const text = dom.puzzleTextInput.value.trim();
+        if (!text) {
+          showToast('No puzzle string to copy!');
+          return;
+        }
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+            showToast('📄 Puzzle copied to clipboard!');
+          } else {
+            prompt('Copy puzzle string:', text);
+          }
+        } catch (e) {
+          prompt('Copy puzzle string:', text);
+        }
+      });
+    }
+
+    // Clear Input
+    if (dom.clearPuzzleBtn) {
+      dom.clearPuzzleBtn.addEventListener('click', () => {
+        window.soundFx && window.soundFx.playClick();
+        dom.puzzleTextInput.value = '';
+        validateAdminPuzzle(false);
+        showToast('Input cleared');
+      });
+    }
 
     // File upload handler
     if (dom.puzzleFileInput) {
