@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>The Traitor — Secret Role Party Game</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;800;900&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  
+  <!-- CDN Libraries for 100% Serverless GitHub Pages P2P Networking & QR Codes -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+<body>
+
+  <header class="header">
+    <div class="top-bar">
+      <span class="brand-badge">🎭 Mystery Party Game</span>
+      <button id="soundToggleBtn" class="icon-btn" title="Toggle Sound" aria-label="Toggle Sound">🔊</button>
+    </div>
+    <h1 class="game-title">THE TRAITOR</h1>
+    <p class="subtitle">Trust no one. Deceive everyone.</p>
+
+    <!-- Game Mode Navigation Switcher -->
+    <nav class="game-nav-tabs" aria-label="Game Mode Switcher">
+      <button id="navTraitorBtn" class="nav-tab active" type="button">
+        <span>🎭 The Traitor</span>
+      </button>
+      <button id="navSudokuBtn" class="nav-tab" type="button">
+        <span>🔢 Multiplayer Sudoku</span>
+      </button>
+    </nav>
+  </header>
+
+  <main class="container">
+
+    <!-- VIEW 1: HOST SETUP VIEW -->
+    <section id="hostSetupView" class="view active card">
+      <h2 style="font-size: 1.3rem; margin-bottom: 18px; text-align: center;">⚙️ Game Setup</h2>
+
+      <!-- Total Players Input -->
+      <div class="form-group">
+        <div class="form-label">
+          <span>Number of Players</span>
+          <span class="form-hint">Min 3 players</span>
+        </div>
+        <div class="stepper-container">
+          <button type="button" class="stepper-btn" id="decPlayers" aria-label="Decrease Players">−</button>
+          <span class="stepper-value" id="playerCountVal">3</span>
+          <button type="button" class="stepper-btn" id="incPlayers" aria-label="Increase Players">+</button>
+        </div>
+      </div>
+
+      <!-- Traitors Input -->
+      <div class="form-group">
+        <div class="form-label">
+          <span>Number of Traitors</span>
+          <span class="form-hint">At least 1 traitor</span>
+        </div>
+        <div class="stepper-container">
+          <button type="button" class="stepper-btn" id="decTraitors" aria-label="Decrease Traitors">−</button>
+          <span class="stepper-value" id="traitorCountVal">1</span>
+          <button type="button" class="stepper-btn" id="incTraitors" aria-label="Increase Traitors">+</button>
+        </div>
+      </div>
+
+      <!-- Live Summary Breakdown -->
+      <div class="role-summary-box">
+        <div class="summary-item traitor-highlight">
+          <div class="summary-count" id="summaryTraitorCount">1</div>
+          <div class="summary-label">🗡️ Traitors</div>
+        </div>
+        <div class="summary-item innocent-highlight">
+          <div class="summary-count" id="summaryInnocentCount">2</div>
+          <div class="summary-label">🛡️ Innocents</div>
+        </div>
+      </div>
+
+      <button id="createGameBtn" class="btn btn-primary">
+        <span>Create Game Room</span> <span>➔</span>
+      </button>
+    </section>
+
+    <!-- VIEW 2: HOST LOBBY / QR CODE DASHBOARD -->
+    <section id="hostLobbyView" class="view card">
+      <div class="room-header">
+        <div class="room-badge" id="hostRoomCodeBadge">ROOM: ----</div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 6px;">Share this QR code or link with your players</p>
+      </div>
+
+      <!-- QR Code Container -->
+      <div class="qr-container" id="hostQrCode"></div>
+
+      <!-- Share Buttons -->
+      <div class="share-actions">
+        <button id="copyLinkBtn" class="btn btn-secondary" style="padding: 12px 8px; font-size: 0.9rem;">
+          📋 Copy Link
+        </button>
+        <button id="whatsappShareBtn" class="btn btn-secondary" style="padding: 12px 8px; font-size: 0.9rem; color: #25d366; border-color: rgba(37, 211, 102, 0.4);">
+          💬 WhatsApp
+        </button>
+      </div>
+
+      <!-- Player Join Tracker -->
+      <div style="margin-top: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span class="status-pill">
+            <span class="pulse-dot"></span>
+            <span id="hostClaimStatus">0 of 3 roles claimed</span>
+          </span>
+          <span id="networkStatusBadge" style="font-size: 0.75rem; color: var(--text-muted);">🟢 Live Sync</span>
+        </div>
+
+        <ul class="player-list" id="hostPlayerList">
+          <!-- Dynamically populated player slots -->
+        </ul>
+      </div>
+
+      <!-- Host Action Controls -->
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px;">
+        <button id="hostNextRoundBtn" class="btn btn-primary">
+          🔄 Reshuffle & Start Next Round
+        </button>
+        <button id="hostResetBtn" class="btn btn-secondary">
+          ⚙️ Change Settings / New Game
+        </button>
+      </div>
+    </section>
+
+    <!-- VIEW 3: PLAYER JOIN / REVEAL VIEW -->
+    <section id="playerView" class="view card">
+      <div style="text-align: center; margin-bottom: 12px;">
+        <div class="room-badge" id="playerRoomBadge">ROOM: ----</div>
+        <p style="font-size: 0.9rem; color: var(--text-muted); margin-top: 6px;" id="playerSubheading">
+          Connected to host. Claim your secret identity!
+        </p>
+      </div>
+
+      <!-- Step A: Enter Name / Select Slot if not assigned -->
+      <div id="playerJoinSection">
+        <div class="form-group" style="margin-top: 14px;">
+          <label class="form-label" for="playerNameInput">Enter Your Name / Nickname</label>
+          <input type="text" id="playerNameInput" placeholder="e.g. Alex, Sam..." maxlength="15" 
+                 style="width: 100%; padding: 14px; background: rgba(0,0,0,0.4); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: #fff; font-size: 1.1rem; outline: none;">
+        </div>
+
+        <!-- Optional Slot Picker (for offline/direct seed mode) -->
+        <div id="slotPickerContainer" style="display: none;">
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">Or choose your Player Slot:</p>
+          <div class="slot-grid" id="slotPickerGrid"></div>
+        </div>
+
+        <button id="claimRoleBtn" class="btn btn-primary" style="margin-top: 10px;">
+          🔓 Reveal My Secret Role
+        </button>
+      </div>
+
+      <!-- Step B: The 3D Secret Mystery Card -->
+      <div id="playerCardSection" style="display: none;">
+        <div class="card-scene">
+          <div class="secret-card" id="secretCard">
+            <!-- Front (Covered) -->
+            <div class="card-face card-face-front">
+              <div class="mystery-icon">🔮</div>
+              <h3 style="font-family: 'Cinzel', serif; font-size: 1.5rem; letter-spacing: 1px;">SECRET DOSSIER</h3>
+              <p class="card-instructions">
+                Tap button below or hold card to reveal your identity.
+              </p>
+              <div class="hold-progress-bar">
+                <div class="hold-progress-fill" id="holdProgressFill"></div>
+              </div>
+            </div>
+
+            <!-- Back (Revealed Role) -->
+            <div class="card-face card-face-back" id="revealedCardBack">
+              <div class="role-icon" id="roleIcon">🗡️</div>
+              <div class="role-title" id="roleTitle">TRAITOR</div>
+              <p class="role-desc" id="roleDescription">
+                You are the secret saboteur. Eliminate the innocents without getting suspected!
+              </p>
+              <div class="auto-hide-badge" id="autoHideBadge">Auto-hiding in 10s</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card Reveal Controls -->
+        <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 12px;">
+          <button id="toggleRevealBtn" class="btn btn-primary">
+            👁️ Tap to Reveal / Hide Role
+          </button>
+          <button id="hideNowBtn" class="btn btn-secondary" style="display: none;">
+            🔒 Hide Role Now
+          </button>
+          <button id="leaveRoomBtn" class="btn btn-secondary" style="font-size: 0.85rem; padding: 10px;">
+            ⬅️ Back to Menu
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- SECTION: MULTIPLAYER SUDOKU RACE -->
+    <!-- ========================================== -->
+    <div id="sudokuSection" style="display: none; width: 100%;">
+
+      <!-- SUDOKU VIEW 1: ADMIN PUZZLE SETUP -->
+      <section id="sudokuAdminSetupView" class="view card active" style="display: block;">
+        <h2 style="font-size: 1.3rem; margin-bottom: 6px; text-align: center;">⚙️ Admin Puzzle Setup</h2>
+        <p style="font-size: 0.85rem; color: var(--text-muted); text-align: center; margin-bottom: 16px;">
+          Only you as the admin can upload the puzzle for everyone to play.
+        </p>
+
+        <!-- Quick Difficulty Presets -->
+        <div class="form-group">
+          <label class="form-label">Quick Presets / Auto-Load</label>
+          <div class="preset-row">
+            <button type="button" class="preset-btn" data-preset="easy">🌟 Easy</button>
+            <button type="button" class="preset-btn" data-preset="medium">⚡ Medium</button>
+            <button type="button" class="preset-btn" data-preset="hard">🔥 Hard</button>
+            <button type="button" class="preset-btn" data-preset="expert">💎 Expert</button>
+          </div>
+        </div>
+
+        <!-- Puzzle String / File Input -->
+        <div class="form-group">
+          <div class="form-label">
+            <span>Puzzle String (81 Chars)</span>
+            <span class="form-hint">Digits 1-9 &amp; 0 or .</span>
+          </div>
+          <textarea id="puzzleTextInput" rows="3" placeholder="Paste 81-character puzzle string (e.g. 530070000600195000098...)" 
+                    style="width: 100%; padding: 12px; background: rgba(0,0,0,0.4); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: #fff; font-family: monospace; font-size: 0.85rem; outline: none; resize: vertical;"></textarea>
+        </div>
+
+        <!-- File Upload Option -->
+        <div class="form-group" style="margin-top: -6px;">
+          <label class="form-label" style="font-size: 0.8rem; color: var(--text-muted);">Or upload from file (.txt / .json):</label>
+          <input type="file" id="puzzleFileInput" accept=".txt,.json,.csv" 
+                 style="font-size: 0.8rem; color: var(--text-muted); width: 100%;">
+        </div>
+
+        <!-- Live Validation Alert -->
+        <div id="puzzleValidationStatus" class="status-msg status-success">
+          ✅ Ready: Certified valid puzzle
+        </div>
+
+        <!-- Mini Preview Box -->
+        <div class="admin-preview-box">
+          <div style="font-size: 0.75rem; color: var(--text-muted); text-align: center; margin-bottom: 6px;">Puzzle Preview (Clues)</div>
+          <div class="preview-grid" id="adminPreviewGrid"></div>
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-top: 14px;">
+          <button id="validatePuzzleBtn" class="btn btn-secondary" type="button" style="flex: 1;">
+            🔍 Validate
+          </button>
+          <button id="createSudokuRoomBtn" class="btn btn-primary" type="button" style="flex: 2;">
+            <span>Create Room &amp; Open Lobby</span> <span>➔</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- SUDOKU VIEW 2: HOST / ADMIN LOBBY & DASHBOARD -->
+      <section id="sudokuHostLobbyView" class="view card" style="display: none;">
+        <div class="room-header">
+          <div class="room-badge" id="sudokuHostRoomBadge">ROOM: SUDOKU-0000</div>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 6px;">
+            Share this room with your friends. When everyone joins, start the race!
+          </p>
+        </div>
+
+        <!-- QR Code Container -->
+        <div class="qr-container" id="sudokuHostQrCode"></div>
+
+        <!-- Share Actions -->
+        <div class="share-actions">
+          <button id="sudokuCopyLinkBtn" class="btn btn-secondary" style="padding: 12px 8px; font-size: 0.9rem;">
+            📋 Copy Link
+          </button>
+          <button id="sudokuWhatsappBtn" class="btn btn-secondary" style="padding: 12px 8px; font-size: 0.9rem; color: #25d366; border-color: rgba(37, 211, 102, 0.4);">
+            💬 WhatsApp
+          </button>
+        </div>
+
+        <!-- Player Live Tracker -->
+        <div style="margin-top: 18px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span class="status-pill">
+              <span class="pulse-dot"></span>
+              <span id="sudokuHostPlayerCount">0 players joined</span>
+            </span>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">🟢 PeerJS Sync</span>
+          </div>
+
+          <ul class="player-list" id="sudokuHostPlayerList">
+            <!-- Dynamically populated -->
+          </ul>
+        </div>
+
+        <!-- Host Controls -->
+        <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px;">
+          <button id="sudokuHostStartRaceBtn" class="btn btn-primary">
+            🚀 Start Sudoku Race for Everyone
+          </button>
+          <button id="sudokuHostPlayTooBtn" class="btn btn-secondary" style="border-color: var(--accent-gold); color: var(--accent-gold);">
+            🎮 Host: Play in this Race Too
+          </button>
+          <button id="sudokuHostResetBtn" class="btn btn-secondary">
+            ⚙️ Change Puzzle / Setup New Room
+          </button>
+        </div>
+      </section>
+
+      <!-- SUDOKU VIEW 3: PLAYER JOIN VIEW -->
+      <section id="sudokuPlayerJoinView" class="view card" style="display: none;">
+        <div style="text-align: center; margin-bottom: 12px;">
+          <div class="room-badge" id="sudokuPlayerRoomBadge">ROOM: SUDOKU-0000</div>
+          <p style="font-size: 0.9rem; color: var(--text-muted); margin-top: 6px;">
+            Multiplayer Sudoku Race — First to solve wins!
+          </p>
+        </div>
+
+        <div class="form-group" style="margin-top: 16px;">
+          <label class="form-label" for="sudokuPlayerNameInput">Enter Your Nickname</label>
+          <input type="text" id="sudokuPlayerNameInput" placeholder="e.g. Solver, Alex, Sam..." maxlength="15" 
+                 style="width: 100%; padding: 14px; background: rgba(0,0,0,0.4); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: #fff; font-size: 1.1rem; outline: none;">
+        </div>
+
+        <button id="sudokuJoinRaceBtn" class="btn btn-primary" style="margin-top: 10px;">
+          🧩 Join Sudoku Race
+        </button>
+
+        <div id="sudokuPlayerWaitingMsg" style="display: none; text-align: center; margin-top: 16px; padding: 14px; background: rgba(255,255,255,0.04); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+          <div class="pulse-dot" style="display: inline-block; margin-right: 6px;"></div>
+          <span style="font-size: 0.9rem; color: var(--innocent-color);">Connected! Waiting for Admin to start the race...</span>
+        </div>
+      </section>
+
+      <!-- SUDOKU VIEW 4: LIVE GAME BOARD -->
+      <section id="sudokuGameView" class="view card" style="display: none;">
+        
+        <!-- Sticky Winner Alert Banner (Shown when another player wins) -->
+        <div id="raceWinnerBanner" class="race-winner-banner" style="display: none;">
+          <span class="banner-icon">🏁</span>
+          <span id="raceWinnerBannerText" class="banner-text">
+            Another player finished first! You lost the race, but keep going to complete your puzzle!
+          </span>
+          <button id="dismissBannerBtn" class="banner-close" type="button" title="Dismiss Banner">✕</button>
+        </div>
+
+        <!-- Race Status Header -->
+        <div class="race-status-header">
+          <span id="sudokuRaceStatusBadge" class="status-badge" style="background: rgba(0,242,254,0.15); border: 1px solid var(--innocent-color); color: var(--innocent-color);">
+            ⚡ Racing Live
+          </span>
+          <span id="sudokuTimer" class="timer-badge">00:00</span>
+          <span id="sudokuFilledCount" style="font-size: 0.85rem; font-weight: 700; color: var(--text-muted);">
+            0 / 81
+          </span>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="progress-bar-bg">
+          <div id="sudokuFilledBar" class="progress-bar-fill"></div>
+        </div>
+
+        <!-- 9x9 Sudoku Grid -->
+        <div class="sudoku-grid-wrapper">
+          <div id="sudokuGrid" class="sudoku-grid">
+            <!-- Dynamically populated 81 cells -->
+          </div>
+        </div>
+
+        <!-- Keypad (Numbers 1-9) -->
+        <div class="num-keypad">
+          <button type="button" class="num-key" data-num="1">1</button>
+          <button type="button" class="num-key" data-num="2">2</button>
+          <button type="button" class="num-key" data-num="3">3</button>
+          <button type="button" class="num-key" data-num="4">4</button>
+          <button type="button" class="num-key" data-num="5">5</button>
+          <button type="button" class="num-key" data-num="6">6</button>
+          <button type="button" class="num-key" data-num="7">7</button>
+          <button type="button" class="num-key" data-num="8">8</button>
+          <button type="button" class="num-key" data-num="9">9</button>
+        </div>
+
+        <!-- Board Actions -->
+        <div class="board-actions">
+          <button id="sudokuNotesToggle" type="button" class="board-action-btn">
+            ✏️ Notes
+          </button>
+          <button id="sudokuEraseBtn" type="button" class="board-action-btn">
+            ⌫ Erase
+          </button>
+          <button id="sudokuUndoBtn" type="button" class="board-action-btn">
+            ↩️ Undo
+          </button>
+          <button id="sudokuConflictToggle" type="button" class="board-action-btn active">
+            ⚠️ Conflicts
+          </button>
+        </div>
+
+        <button id="sudokuCheckBtn" class="btn btn-primary" type="button" style="margin-top: 14px;">
+          ✓ Check / Submit Solution
+        </button>
+      </section>
+
+    </div>
+
+  </main>
+
+  <!-- Winner / Completion Modal Overlay -->
+  <div id="sudokuModalOverlay" class="sudoku-modal-overlay" style="display: none;">
+    <div class="sudoku-modal-card">
+      <button id="sudokuModalClose" class="modal-close-btn" type="button" aria-label="Close modal">✕</button>
+      <div id="sudokuModalContent"></div>
+    </div>
+  </div>
+
+  <!-- Notification Toast -->
+  <div id="toast" class="toast">Link copied to clipboard!</div>
+
+  <footer>
+    <p>Multiplayer Games &bull; 100% Serverless &amp; Private &bull; Works on GitHub Pages</p>
+  </footer>
+
+  <script src="audio.js"></script>
+  <script src="sudoku.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
