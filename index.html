@@ -264,14 +264,14 @@
           <div class="preview-grid" id="adminPreviewGrid"></div>
         </div>
 
-        <!-- Host Competition Mode Config -->
+        <!-- Host Real-Time Conflict Hints Config (Default: OFF / Silent Mode) -->
         <div class="form-group" style="margin-top: 10px;">
           <label style="display: flex; align-items: flex-start; gap: 10px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); padding: 12px 14px; border-radius: var(--radius-md); cursor: pointer;">
-            <input type="checkbox" id="hostStrictValidationToggle" checked style="margin-top: 3px; width: 18px; height: 18px; accent-color: var(--innocent-color); cursor: pointer;">
+            <input type="checkbox" id="hostLiveMistakeToggle" style="margin-top: 3px; width: 18px; height: 18px; accent-color: var(--innocent-color); cursor: pointer;">
             <div>
-              <strong style="font-size: 0.9rem; color: #fff;">Silent Competition Mode (Validate on Submit only)</strong>
+              <strong style="font-size: 0.9rem; color: #fff;">Show Live Mistake Hints (Conflict Highlights)</strong>
               <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">
-                When enabled, players receive NO live error hints while solving. Mistakes are checked only when they click "Check / Submit Solution".
+                <strong>OFF by default (Silent Mode):</strong> The game will NOT reveal errors while you solve. The board is checked only when you click "Check / Submit Solution".
               </p>
             </div>
           </label>
@@ -431,7 +431,7 @@
           <button id="sudokuUndoBtn" type="button" class="board-action-btn">
             ↩️ Undo
           </button>
-          <button id="sudokuConflictToggle" type="button" class="board-action-btn active">
+          <button id="sudokuConflictToggle" type="button" class="board-action-btn" style="display: none;">
             ⚠️ Conflicts
           </button>
         </div>

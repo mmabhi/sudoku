@@ -166,7 +166,7 @@
     hostConn: null,
     myPlayerId: null,
     myPlayerName: '',
-    strictMode: true,
+    liveMistakeHints: false,
     highlightConflicts: false
   };
 
@@ -202,7 +202,7 @@
     dom.puzzleValidationStatus = document.getElementById('puzzleValidationStatus');
     dom.adminPreviewGrid = document.getElementById('adminPreviewGrid');
     dom.createSudokuRoomBtn = document.getElementById('createSudokuRoomBtn');
-    dom.hostStrictValidationToggle = document.getElementById('hostStrictValidationToggle');
+    dom.hostLiveMistakeToggle = document.getElementById('hostLiveMistakeToggle');
 
     // Host Lobby
     dom.sudokuHostRoomBadge = document.getElementById('sudokuHostRoomBadge');
@@ -461,8 +461,8 @@
   function createSudokuRoom() {
     state.isAdmin = true;
     state.roomId = 'SUDOKU-' + Math.floor(1000 + Math.random() * 9000);
-    state.strictMode = dom.hostStrictValidationToggle ? dom.hostStrictValidationToggle.checked : true;
-    state.highlightConflicts = !state.strictMode;
+    state.liveMistakeHints = dom.hostLiveMistakeToggle ? dom.hostLiveMistakeToggle.checked : false;
+    state.highlightConflicts = state.liveMistakeHints;
     state.connectedPlayers = {};
     state.winnerAnnounced = null;
     state.raceStarted = false;
@@ -482,7 +482,7 @@
       mode: 'sudoku',
       room: state.roomId,
       puz: state.puzzleString,
-      strict: state.strictMode ? '1' : '0'
+      hints: state.liveMistakeHints ? '1' : '0'
     });
     return `${base}?${params.toString()}`;
   }
@@ -625,7 +625,7 @@
         type: 'ROOM_INFO',
         roomId: state.roomId,
         puzzleString: state.puzzleString,
-        strictMode: state.strictMode,
+        liveMistakeHints: state.liveMistakeHints,
         raceStarted: state.raceStarted,
         winnerAnnounced: state.winnerAnnounced
       });
@@ -721,7 +721,7 @@
           conn.send({
             type: 'START_RACE',
             puzzleString: state.puzzleString,
-            strictMode: state.strictMode
+            liveMistakeHints: state.liveMistakeHints
           });
         } catch (e) {}
       });
@@ -787,9 +787,9 @@
 
   function handlePlayerIncomingData(data) {
     if (data.type === 'ROOM_INFO' || data.type === 'START_RACE') {
-      if (typeof data.strictMode !== 'undefined') {
-        state.strictMode = !!data.strictMode;
-        state.highlightConflicts = !state.strictMode;
+      if (typeof data.liveMistakeHints !== 'undefined') {
+        state.liveMistakeHints = !!data.liveMistakeHints;
+        state.highlightConflicts = state.liveMistakeHints;
       }
       if (data.puzzleString) {
         state.puzzleString = data.puzzleString;
@@ -819,8 +819,8 @@
     state.raceStarted = true;
     state.raceFinished = false;
 
-    // Strict Mode: hide conflict toggle button and disable live conflict highlights
-    if (state.strictMode) {
+    // Live Mistake Hints: only display conflict button if enabled by host
+    if (!state.liveMistakeHints) {
       state.highlightConflicts = false;
       if (dom.sudokuConflictToggle) dom.sudokuConflictToggle.style.display = 'none';
     } else {
@@ -847,8 +847,8 @@
 
   function renderSudokuGrid() {
     dom.sudokuGrid.innerHTML = '';
-    // If strictMode is active, do not compute or show conflicts while solving
-    const conflicts = (!state.strictMode && state.highlightConflicts) ? SudokuEngine.findConflicts(state.playerGrid) : new Set();
+    // Conflicts are ONLY computed and displayed if host explicitly enabled liveMistakeHints
+    const conflicts = (state.liveMistakeHints && state.highlightConflicts) ? SudokuEngine.findConflicts(state.playerGrid) : new Set();
 
     for (let i = 0; i < 81; i++) {
       const cell = document.createElement('div');
@@ -1182,7 +1182,7 @@
       if (emptyCount > 0) {
         showToast(`Keep going! ${emptyCount} cell${emptyCount === 1 ? '' : 's'} remaining.`);
       } else {
-        if (state.strictMode) {
+        if (!state.liveMistakeHints) {
           showToast('❌ Solution has incorrect numbers or duplicates. Check carefully and re-submit!');
         } else {
           showToast('There are conflicts or incorrect numbers. Check highlighted cells!');
@@ -1390,10 +1390,14 @@
         state.originalClues = SudokuEngine.parseGrid(puz) || [];
       }
 
+      const hintsParam = urlParams.get('hints');
       const strictParam = urlParams.get('strict');
-      if (strictParam !== null) {
-        state.strictMode = strictParam === '1';
-        state.highlightConflicts = !state.strictMode;
+      if (hintsParam !== null) {
+        state.liveMistakeHints = hintsParam === '1';
+        state.highlightConflicts = state.liveMistakeHints;
+      } else if (strictParam !== null) {
+        state.liveMistakeHints = strictParam !== '1';
+        state.highlightConflicts = state.liveMistakeHints;
       }
 
       if (room) {
